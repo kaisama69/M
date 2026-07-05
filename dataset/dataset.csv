@@ -1,0 +1,151 @@
+text,sentiment
+"I had a wonderful day today, everything went smoothly.",Positive
+I am so grateful for the supportive friends in my life.,Positive
+Successfully completed my presentation today and it felt great!,Positive
+I feel full of energy and ready to tackle the week ahead.,Positive
+"The morning walk was very refreshing, the weather is beautiful.",Positive
+"Had a great dinner with family tonight, lots of laughter.",Positive
+I am proud of the progress I've been making on my personal projects.,Positive
+Today was a productive and satisfying day.,Positive
+I feel very optimistic about the future.,Positive
+It's a beautiful day and I feel happy and content.,Positive
+I cooked a delicious meal today and enjoyed it.,Positive
+Feeling inspired after reading a new book this afternoon.,Positive
+I got a promotion at work! I'm so excited and happy.,Positive
+Woke up feeling refreshed and well-rested today.,Positive
+Had a lovely conversation with an old friend I hadn't seen in years.,Positive
+I feel confident about my exam preparation.,Positive
+"Everything is falling into place, I feel so blessed.",Positive
+My team won the match today! We are thrilled.,Positive
+I managed to resolve a complex bug and felt so accomplished.,Positive
+Smiling today because life is filled with wonderful small moments.,Positive
+"I feel peaceful, calm, and happy inside.",Positive
+It felt amazing to help a stranger on my way home today.,Positive
+I am excited about the weekend plans.,Positive
+I feel motivated to exercise and eat healthy foods.,Positive
+I am learning to love myself more every day.,Positive
+"Received positive feedback from my manager, which boosted my confidence.",Positive
+Spent the afternoon painting and it brought me so much joy.,Positive
+"The sunset tonight was spectacular, made me feel at peace.",Positive
+I am looking forward to learning new skills.,Positive
+"Feeling strong, healthy, and happy today.",Positive
+"We had a great brainstorming session at work, very exciting ideas.",Positive
+I am happy with how my life is going right now.,Positive
+The garden is in full bloom and it looks beautiful.,Positive
+"I received a surprise gift from a coworker, so thoughtful!",Positive
+"I managed to wake up early and watch the sunrise, it was magical.",Positive
+Feeling extremely grateful for the little things in life.,Positive
+"My presentation went very well, I'm glad it's done successfully.",Positive
+I had a great time playing games with my siblings.,Positive
+I am feeling very creative and inspired today.,Positive
+Had a deep and meaningful conversation with my partner.,Positive
+It is nice to have some free time to relax and unwind.,Positive
+I feel very satisfied with my performance today.,Positive
+I'm excited to start this new journey.,Positive
+"I feel supported, loved, and appreciated.",Positive
+The concert tonight was absolutely amazing and energizing.,Positive
+I feel a sense of clarity and purpose today.,Positive
+"Everything went according to plan, feeling satisfied.",Positive
+I am happy that I finally finished cleaning my room.,Positive
+"I feel so light, happy, and optimistic.",Positive
+"Celebrating a minor milestone today, step by step we grow.",Positive
+I feel so lonely and disconnected from everyone.,Negative
+I'm extremely anxious and stressed about my upcoming exams.,Negative
+"Nothing seems to go right for me, I feel like a failure.",Negative
+I had a huge argument with my close friend and now I feel terrible.,Negative
+Woke up with a headache and a sense of dread.,Negative
+I'm feeling very overwhelmed with the workload at office.,Negative
+It feels like I am stuck in a rut and can't escape.,Negative
+I feel so sad and just want to cry all day.,Negative
+No one seems to understand what I'm going through.,Negative
+I failed my driving test today and I'm totally devastated.,Negative
+"Feeling completely exhausted, both mentally and physically.",Negative
+I am so tired of dealing with constant stress and pressure.,Negative
+I feel neglected and ignored by my family.,Negative
+I had a bad nightmare last night and couldn't sleep afterward.,Negative
+My anxiety is acting up again and I feel very restless.,Negative
+I got some disappointing news about my job application.,Negative
+I feel so hopeless and don't know what to do next.,Negative
+Everything is so chaotic and I'm losing control.,Negative
+I am angry at myself for making the same mistake again.,Negative
+"I feel isolated, like I don't belong anywhere.",Negative
+"It was a horrible day, everything went wrong.",Negative
+My chest feels tight and I'm having trouble breathing because of panic.,Negative
+I am hurting inside and nobody seems to care.,Negative
+I feel completely demotivated and lack energy to do anything.,Negative
+The future looks so dark and uncertain to me.,Negative
+I am feeling very insecure about my appearance and abilities.,Negative
+"I lost my wallet today, which was extremely frustrating.",Negative
+I'm struggling to cope with the loss of my pet.,Negative
+My thoughts are running wild and I can't calm my mind down.,Negative
+I feel trapped in this situation with no way out.,Negative
+"Nobody came to my birthday party, I feel so unloved.",Negative
+"I'm feeling very low today, just want to stay in bed.",Negative
+The constant criticism from my peer is taking a toll on me.,Negative
+I feel rejected and worthless.,Negative
+"My boss yelled at me today, I felt so humiliated.",Negative
+"I am so stressed about my finances, it's keeping me awake.",Negative
+I feel like I'm letting everyone down.,Negative
+I'm suffering from severe insomnia these days.,Negative
+"I feel empty inside, like something is missing.",Negative
+I had a very frustrating day trying to solve a simple issue.,Negative
+I feel really guilty about what I said yesterday.,Negative
+I am filled with self-doubt and fear of failure.,Negative
+It feels like my hard work is never appreciated.,Negative
+I feel so weak and helpless right now.,Negative
+I am constantly worried about what might go wrong.,Negative
+I feel very bitter and resentful today.,Negative
+"My health has been deteriorating, and I feel miserable.",Negative
+"I feel so isolated in this new city, I miss my home.",Negative
+"I got into a fight with my parents, feeling miserable.",Negative
+I feel like I am failing at everything I try.,Negative
+Today I woke up at 7 AM and had oatmeal for breakfast.,Neutral
+I went to the supermarket and bought some groceries.,Neutral
+I am working on my coding assignment today.,Neutral
+The weather is cloudy and it might rain later.,Neutral
+I have a meeting scheduled for 3 PM this afternoon.,Neutral
+I spent two hours reading emails and replying to them.,Neutral
+Today I washed my clothes and cleaned the kitchen table.,Neutral
+I am sitting in a cafe drinking a cup of green tea.,Neutral
+I watched a documentary about nature on television.,Neutral
+I walked to the local park and sat on a bench.,Neutral
+I need to renew my library books by tomorrow.,Neutral
+I am writing a report for my project coordinator.,Neutral
+"Today was a normal, quiet day with nothing special happening.",Neutral
+I bought a black pen and a notebook from the stationery shop.,Neutral
+I cooked rice and chicken for lunch today.,Neutral
+The train was on time and not very crowded.,Neutral
+I attended a lecture on databases at my college.,Neutral
+I have to pay my electricity bill before Friday.,Neutral
+I spent the evening organizing my desktop folders.,Neutral
+I watered the indoor plants in my living room.,Neutral
+The temperature today is around 25 degrees Celsius.,Neutral
+I am planning my schedule for the upcoming week.,Neutral
+I had a salad and some soup for dinner.,Neutral
+I walked for thirty minutes after having my lunch.,Neutral
+I am waiting for my packages to be delivered today.,Neutral
+I checked the news on my phone this morning.,Neutral
+I spent the morning attending online classes.,Neutral
+I need to buy some new shoes for my running routine.,Neutral
+The coffee shop down the street has reopened today.,Neutral
+I listened to an instrumental music playlist while studying.,Neutral
+I spent my afternoon filing tax documents.,Neutral
+"I brushed my teeth, washed my face, and prepared for bed.",Neutral
+"The computer screen is a bit dusty, I should clean it.",Neutral
+I received a notification about a software update.,Neutral
+I am practicing touch typing on my laptop.,Neutral
+I drove my car to the local repair shop to check the brakes.,Neutral
+I am reading a textbook chapter on linear regression.,Neutral
+Today I bought some apples and bananas from the vendor.,Neutral
+I spent my evening doing laundry and folding clothes.,Neutral
+I have a dental checkup scheduled next Monday.,Neutral
+I ate a sandwich at noon and drank some water.,Neutral
+I walked through the mall to get to the bookstore.,Neutral
+I am looking at a map to find the best route to the venue.,Neutral
+I need to clean the air filters in the air conditioner.,Neutral
+I spent three hours writing code and fixing minor warnings.,Neutral
+The package contains a user manual and a charger.,Neutral
+I am filling out a survey form for my university.,Neutral
+I am reading the terms and conditions of this software.,Neutral
+Today I replaced the batteries in the wall clock.,Neutral
+I watched a short video tutorial on git commands.,Neutral
