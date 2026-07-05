@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import Header from '../components/Header';
 import Toast from '../components/Toast';
 
@@ -306,6 +307,18 @@ const JournalPage = () => {
                 </h4>
                 <p className="text-[0.95rem] leading-relaxed text-textSecondary whitespace-pre-line">{result.recommendation}</p>
               </div>
+
+              {result.sentiment !== 'Normal' && (
+                <div className="flex justify-center mt-2">
+                  <Link 
+                    to="/breathing"
+                    className="inline-flex items-center gap-2 text-xs font-semibold text-primary hover:text-white transition-colors duration-300 bg-primary/10 hover:bg-primary/20 border border-primary/20 rounded-lg px-4 py-2"
+                  >
+                    <i className="fa-solid fa-spa"></i>
+                    <span>Feeling overwhelmed? Try a 1-min Breathing reset</span>
+                  </Link>
+                </div>
+              )}
             </div>
           )}
         </section>

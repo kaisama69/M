@@ -42,7 +42,8 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             email TEXT UNIQUE NOT NULL,
             password_hash TEXT NOT NULL,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            is_admin INTEGER DEFAULT 0
         )
     ''')
     
@@ -73,6 +74,12 @@ def init_db():
     columns = [row[1] for row in cursor.fetchall()]
     if 'user_id' not in columns:
         cursor.execute("ALTER TABLE journals ADD COLUMN user_id INTEGER REFERENCES users(id)")
+
+    # 5. Check if is_admin column exists in users, and add if missing
+    cursor.execute("PRAGMA table_info(users)")
+    user_columns = [row[1] for row in cursor.fetchall()]
+    if 'is_admin' not in user_columns:
+        cursor.execute("ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0")
         
     conn.commit()
     conn.close()
@@ -325,7 +332,8 @@ def signup():
             'message': 'Signup successful! You can now log in.',
             'user': {
                 'id': user_id,
-                'email': email
+                'email': email,
+                'is_admin': 0
             }
         }), 201
         
@@ -344,14 +352,14 @@ def login():
     try:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
-        cursor.execute('SELECT id, email, password_hash FROM users WHERE email = ?', (email,))
+        cursor.execute('SELECT id, email, password_hash, is_admin FROM users WHERE email = ?', (email,))
         row = cursor.fetchone()
         conn.close()
         
         if not row:
             return jsonify({'error': 'Invalid email or password.'}), 401
             
-        user_id, user_email, password_hash = row
+        user_id, user_email, password_hash, is_admin = row
         
         if not check_password_hash(password_hash, password):
             return jsonify({'error': 'Invalid email or password.'}), 401
@@ -360,7 +368,8 @@ def login():
             'message': 'Login successful!',
             'user': {
                 'id': user_id,
-                'email': user_email
+                'email': user_email,
+                'is_admin': is_admin
             }
         }), 200
         
@@ -374,25 +383,31 @@ def demo_login():
         cursor = conn.cursor()
         
         # Check if demo user already exists
-        cursor.execute("SELECT id, email FROM users WHERE email = 'demo@mindscale.com'")
+        cursor.execute("SELECT id, email, is_admin FROM users WHERE email = 'demo@mindscale.com'")
         row = cursor.fetchone()
         
         if row:
-            user_id, user_email = row
+            user_id, user_email, is_admin = row
+            if not is_admin:
+                cursor.execute("UPDATE users SET is_admin = 1 WHERE id = ?", (user_id,))
+                conn.commit()
+                is_admin = 1
         else:
-            # Create a demo user
+            # Create a demo user as admin
             password_hash = generate_password_hash('DemoAccount123!')
-            cursor.execute("INSERT INTO users (email, password_hash) VALUES ('demo@mindscale.com', ?)", (password_hash,))
+            cursor.execute("INSERT INTO users (email, password_hash, is_admin) VALUES ('demo@mindscale.com', ?, 1)", (password_hash,))
             user_id = cursor.lastrowid
             conn.commit()
             user_email = 'demo@mindscale.com'
+            is_admin = 1
             
         conn.close()
         return jsonify({
             'message': 'Logged in as Demo User!',
             'user': {
                 'id': user_id,
-                'email': user_email
+                'email': user_email,
+                'is_admin': is_admin
             }
         }), 200
     except Exception as e:
@@ -547,6 +562,88 @@ def get_stats():
             'timeline': timeline,
             'total': sum(counts.values())
         })
+    except Exception as e:
+        return jsonify({'error': f'Database error: {str(e)}'}), 500
+
+# ==========================================
+# Admin Routes
+# ==========================================
+
+@app.route('/api/admin/users', methods=['GET'])
+def admin_get_users():
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        
+        # Get users and their total journal count
+        cursor.execute('''
+            SELECT u.id, u.email, u.created_at, u.is_admin, COUNT(j.id) as journal_count
+            FROM users u
+            LEFT JOIN journals j ON u.id = j.user_id
+            GROUP BY u.id
+            ORDER BY u.created_at DESC
+        ''')
+        
+        users = []
+        for row in cursor.fetchall():
+            users.append({
+                'id': row[0],
+                'email': row[1],
+                'created_at': row[2],
+                'is_admin': bool(row[3]),
+                'journal_count': row[4]
+            })
+            
+        conn.close()
+        return jsonify({'users': users}), 200
+        
+    except Exception as e:
+        return jsonify({'error': f'Database error: {str(e)}'}), 500
+
+@app.route('/api/admin/users/<int:user_id>', methods=['DELETE'])
+def admin_delete_user(user_id):
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        
+        # Delete user's journals first (cascade)
+        cursor.execute('DELETE FROM journals WHERE user_id = ?', (user_id,))
+        # Delete user
+        cursor.execute('DELETE FROM users WHERE id = ?', (user_id,))
+        
+        if cursor.rowcount == 0:
+            conn.close()
+            return jsonify({'error': 'User not found.'}), 404
+            
+        conn.commit()
+        conn.close()
+        return jsonify({'message': 'User deleted successfully.'}), 200
+        
+    except Exception as e:
+        return jsonify({'error': f'Database error: {str(e)}'}), 500
+
+@app.route('/api/admin/users/<int:user_id>/toggle-admin', methods=['POST'])
+def admin_toggle_user(user_id):
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        
+        # Fetch current status
+        cursor.execute('SELECT is_admin FROM users WHERE id = ?', (user_id,))
+        row = cursor.fetchone()
+        
+        if not row:
+            conn.close()
+            return jsonify({'error': 'User not found.'}), 404
+            
+        new_status = 0 if row[0] == 1 else 1
+        
+        cursor.execute('UPDATE users SET is_admin = ? WHERE id = ?', (new_status, user_id))
+        conn.commit()
+        conn.close()
+        
+        return jsonify({'message': 'User admin status updated.', 'is_admin': bool(new_status)}), 200
+        
     except Exception as e:
         return jsonify({'error': f'Database error: {str(e)}'}), 500
 

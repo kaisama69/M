@@ -40,6 +40,36 @@ const Sidebar = ({ user, onLogout }) => {
                 <span>Analytics View</span>
               </Link>
             </li>
+            <li>
+              <Link 
+                to="/breathing" 
+                className={`flex items-center gap-4 py-3.5 px-5 rounded-xl font-medium transition-all duration-300 ease-in-out ${
+                  location.pathname === '/breathing' 
+                    ? 'bg-primary/15 text-white border border-primary/25 shadow-[inset_0_0_12px_rgba(139,92,246,0.05)]' 
+                    : 'text-textSecondary border border-transparent hover:bg-white/5 hover:text-white'
+                }`}
+              >
+                <i className="fa-solid fa-spa text-[1.2rem]"></i>
+                <span>Breathing Room</span>
+              </Link>
+            </li>
+            
+            {/* Admin Panel Link */}
+            {user?.is_admin === 1 && (
+              <li className="mt-2 pt-2 border-t border-white/5">
+                <Link 
+                  to="/admin" 
+                  className={`flex items-center gap-4 py-3.5 px-5 rounded-xl font-medium transition-all duration-300 ease-in-out ${
+                    location.pathname === '/admin' 
+                      ? 'bg-negative/15 text-negative border border-negative/25 shadow-[inset_0_0_12px_rgba(239,68,68,0.05)]' 
+                      : 'text-textSecondary border border-transparent hover:bg-negative/5 hover:text-negative'
+                  }`}
+                >
+                  <i className="fa-solid fa-shield-halved text-[1.2rem]"></i>
+                  <span>Admin Panel</span>
+                </Link>
+              </li>
+            )}
           </ul>
         </nav>
       </div>

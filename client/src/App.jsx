@@ -5,6 +5,9 @@ import JournalPage from './pages/JournalPage';
 import DashboardPage from './pages/DashboardPage';
 import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
+import BreathingPage from './pages/BreathingPage';
+import AdminPage from './pages/AdminPage';
+import SoundscapePlayer from './components/SoundscapePlayer';
 
 // Ambient Glowing Background Blobs Component
 const GlowingBackground = () => (
@@ -40,11 +43,12 @@ function App() {
     }
 
     return (
-      <div className="flex min-h-screen w-full">
+      <div className="flex min-h-screen w-full relative">
         <Sidebar user={user} onLogout={handleLogout} />
         <main className="flex-1 min-h-screen p-6 md:p-10 overflow-y-auto w-full">
           {children}
         </main>
+        <SoundscapePlayer />
       </div>
     );
   };
@@ -77,6 +81,22 @@ function App() {
           element={
             <ProtectedLayout>
               <DashboardPage />
+            </ProtectedLayout>
+          } 
+        />
+        <Route 
+          path="/breathing" 
+          element={
+            <ProtectedLayout>
+              <BreathingPage />
+            </ProtectedLayout>
+          } 
+        />
+        <Route 
+          path="/admin" 
+          element={
+            <ProtectedLayout>
+              {user?.is_admin === 1 ? <AdminPage /> : <Navigate to="/" replace />}
             </ProtectedLayout>
           } 
         />
