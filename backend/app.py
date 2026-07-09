@@ -32,12 +32,17 @@ DB_PATH = os.path.join(BASE_DIR, 'database', 'db.sqlite3')
 MODEL_PATH = os.path.join(BASE_DIR, 'model', 'sentiment_model.pkl')
 VECTORIZER_PATH = os.path.join(BASE_DIR, 'model', 'vectorizer.pkl')
 
+CHATBOT_MODEL_PATH = os.path.join(BASE_DIR, 'model', 'chatbot_model.pkl')
+CHATBOT_VECTORIZER_PATH = os.path.join(BASE_DIR, 'model', 'chatbot_vectorizer.pkl')
+
 # Ensure database directory exists
 os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 
 # Load model and vectorizer
 model = None
 vectorizer = None
+chatbot_model = None
+chatbot_vectorizer = None
 
 def init_db():
     """Initializes the SQLite database with the journals, users, and email_verifications tables."""
@@ -103,7 +108,7 @@ def init_db():
 
 def load_models():
     """Loads the pre-trained vectorizer and sentiment classification model."""
-    global model, vectorizer
+    global model, vectorizer, chatbot_model, chatbot_vectorizer
     if not os.path.exists(MODEL_PATH) or not os.path.exists(VECTORIZER_PATH):
         print("WARNING: Model or Vectorizer files not found. Please run training first!")
         return False
@@ -112,6 +117,14 @@ def load_models():
             model = pickle.load(f)
         with open(VECTORIZER_PATH, 'rb') as f:
             vectorizer = pickle.load(f)
+            
+        if os.path.exists(CHATBOT_MODEL_PATH) and os.path.exists(CHATBOT_VECTORIZER_PATH):
+            with open(CHATBOT_MODEL_PATH, 'rb') as f:
+                chatbot_model = pickle.load(f)
+            with open(CHATBOT_VECTORIZER_PATH, 'rb') as f:
+                chatbot_vectorizer = pickle.load(f)
+            print("Chatbot models loaded successfully.")
+            
         print("Model and Vectorizer loaded successfully.")
         return True
     except Exception as e:
@@ -841,6 +854,62 @@ def admin_toggle_user(user_id):
         
     except Exception as e:
         return jsonify({'error': f'Database error: {str(e)}'}), 500
+
+
+# ==========================================
+# Chatbot Route
+# ==========================================
+
+import json
+
+@app.route('/api/chat', methods=['POST'])
+def chat():
+    """
+    NLP Intent-Based Chatbot Endpoint
+    Classifies user message intent and returns a predefined response.
+    """
+    data = request.get_json()
+    if not data or 'message' not in data:
+        return jsonify({'error': 'No message provided'}), 400
+        
+    user_message = data['message'].strip()
+    if not user_message:
+        return jsonify({'error': 'Message cannot be empty'}), 400
+        
+    if not chatbot_model or not chatbot_vectorizer:
+        return jsonify({'error': 'Chatbot ML models not loaded'}), 500
+        
+    try:
+        # Preprocess text
+        cleaned_msg = clean_text(user_message)
+        if not cleaned_msg:
+            # Fallback for completely empty/meaningless messages
+            return jsonify({'response': "I didn't quite catch that. How are you feeling?"}), 200
+            
+        # Predict intent
+        vec = chatbot_vectorizer.transform([cleaned_msg])
+        intent = chatbot_model.predict(vec)[0]
+        
+        # Load responses mapped to intents
+        intent_data_path = os.path.join(BASE_DIR, 'dataset', 'chat_intents.json')
+        with open(intent_data_path, 'r') as f:
+            intent_data = json.load(f)
+            
+        # Get random response for the predicted intent
+        response_text = "I'm here for you. Tell me more."
+        for i in intent_data['intents']:
+            if i['intent'] == intent:
+                response_text = random.choice(i['responses'])
+                break
+                
+        return jsonify({
+            'intent': intent,
+            'response': response_text
+        }), 200
+        
+    except Exception as e:
+        print(f"Error in chat endpoint: {e}")
+        return jsonify({'error': 'Failed to process message'}), 500
 
 if __name__ == '__main__':
     # Ensure models are loaded before running app

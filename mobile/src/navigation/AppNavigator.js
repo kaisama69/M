@@ -11,6 +11,7 @@ import SignupScreen from '../screens/SignupScreen';
 import JournalScreen from '../screens/JournalScreen';
 import DashboardScreen from '../screens/DashboardScreen';
 import BreathingScreen from '../screens/BreathingScreen';
+import ChatbotScreen from '../screens/ChatbotScreen';
 import AdminScreen from '../screens/AdminScreen';
 
 const Stack = createNativeStackNavigator();
@@ -55,7 +56,7 @@ const TabNavigator = ({ user, onLogout }) => {
         tabBarInactiveTintColor: Colors.textSecondary,
         tabBarLabelStyle: {
           fontFamily: FontFamily.medium,
-          fontSize: 11,
+          fontSize: 10,
         },
         tabBarIcon: ({ color, size }) => {
           let iconName;
@@ -66,6 +67,8 @@ const TabNavigator = ({ user, onLogout }) => {
             iconName = 'chart-bar';
           } else if (route.name === 'Breathing') {
             iconName = 'spa';
+          } else if (route.name === 'Chat') {
+            iconName = 'robot';
           } else if (route.name === 'Admin') {
             iconName = 'shield-alt';
           }
@@ -77,6 +80,7 @@ const TabNavigator = ({ user, onLogout }) => {
       <Tab.Screen name="Journal" component={JournalScreen} />
       <Tab.Screen name="Dashboard" component={DashboardScreen} />
       <Tab.Screen name="Breathing" component={BreathingScreen} />
+      <Tab.Screen name="Chat" component={ChatbotScreen} />
       {isAdmin && <Tab.Screen name="Admin" component={AdminScreen} />}
     </Tab.Navigator>
   );
