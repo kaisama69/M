@@ -1,129 +1,115 @@
 # MindScale: AI-Powered Mental Health Tracking System
 
-MindScale is a modern, responsive web application designed for real-time sentiment analysis and mental health journaling. The system processes user reflections, identifies key emotional states (Positive, Negative, Neutral), provides immediate supportive feedback, and records long-term mental health trends.
-
-This version is fully structured and prepared as a prototype for the **Mid Defense Phase**.
+MindScale is a mobile application for real-time sentiment analysis and mental health journaling. The system processes user reflections, identifies emotional states, provides supportive feedback, tracks mental health trends, and includes face-based biometric authentication.
 
 ---
 
-## 📁 File Structure
+## 📁 Project Structure
 
 ```
-mindscale/
+MindScale/
 ├── backend/
-│   ├── app.py                # Core Flask server and API endpoints
+│   ├── app.py                          # Flask API server
 │   ├── model/
-│   │   ├── train_model.py    # ML pipeline training script
-│   │   ├── sentiment_model.pkl # Trained Logistic Regression classifier (binary pkl)
-│   │   └── vectorizer.pkl    # Fitted TF-IDF Vectorizer (binary pkl)
+│   │   ├── train_model.py              # ML pipeline training script
+│   │   ├── sentiment_model.pkl         # Trained Logistic Regression classifier
+│   │   └── vectorizer.pkl             # Fitted TF-IDF Vectorizer
+│   ├── models/
+│   │   └── face_landmarker.task        # MediaPipe face landmark model
 │   ├── utils/
-│   │   └── preprocessing.py   # Stopword removal and clean tokenization utilities
+│   │   ├── preprocessing.py            # Text cleaning and tokenization
+│   │   └── face_recognition_utils.py   # Face encoding and matching
 │   └── database/
-│       └── db.sqlite3        # SQLite backend database for entry storage
-├── frontend/
-│   ├── index.html            # Main journal entry page (Glassmorphism layout)
-│   ├── styles.css            # Stylesheet importing static styles
-│   └── app.js                # Core JS logic for inputs, predictions, and history
-├── templates/
-│   └── dashboard.html        # Detailed analytics dashboard with Chart.js charts
-├── static/
-│   ├── css/
-│   │   └── styles.css        # Shared CSS variables, variables, and themes
-│   └── js/
-│       └── dashboard.js      # Script to draw trend lines and search historical table logs
+│       └── db.sqlite3                  # SQLite database
+├── mobile/
+│   ├── App.js                          # Expo app entry point
+│   ├── src/
+│   │   ├── screens/                    # App screens
+│   │   ├── components/                 # Reusable UI components
+│   │   ├── navigation/                 # Navigation config
+│   │   ├── utils/                      # Helper utilities
+│   │   ├── config.js                   # API configuration
+│   │   └── theme.js                    # App theme/colors
+│   ├── assets/                         # Images and fonts
+│   ├── app.json                        # Expo configuration
+│   └── package.json                    # Node dependencies
 ├── dataset/
-│   └── dataset.csv           # Synthesized mental health sentiment dataset
-├── requirements.txt          # Python package requirements
-└── README.md                 # Project guide
+│   ├── Combined Data.csv               # Full training dataset
+│   └── dataset.csv                     # Sample dataset
+├── requirements.txt                    # Python dependencies
+└── README.md
 ```
 
 ---
 
-## ⚙️ Core Technical Pipeline
+## ⚙️ Core Pipeline
 
-1. **User Journal Entry**: User submits raw journaling text in `frontend/index.html`.
-2. **Preprocessing**: The text is cleaned in `backend/utils/preprocessing.py` (lowercased, special characters/numbers removed, split into tokens, and filtered against 100+ standard English stopwords).
-3. **TF-IDF Vectorization**: Text is transformed into numerical features using `backend/model/vectorizer.pkl`.
-4. **Classification**: `backend/model/sentiment_model.pkl` (a Logistic Regression classifier trained with balanced weights) predicts whether the sentiment is `Positive`, `Negative`, or `Neutral` alongside a probability confidence score.
-5. **Supportive Recommendation**: Based on the sentiment, a custom encouragement or mindfulness tip is served.
-6. **Persistence**: The entry, sentiment, confidence, and timestamp are saved in SQLite database `backend/database/db.sqlite3`.
-7. **Analytics**: Dashboard pulling stats dynamically aggregates totals, charts trend flows, and displays logs inside filterable dashboards.
+1. **Journal Entry** — User submits text via the mobile app
+2. **Preprocessing** — Text is cleaned, tokenized, and stopwords removed
+3. **TF-IDF Vectorization** — Text converted to numerical features
+4. **Classification** — Logistic Regression predicts sentiment (Positive / Negative / Neutral)
+5. **Recommendation** — Supportive feedback based on sentiment
+6. **Persistence** — Entries saved in SQLite with timestamps
+7. **Face Unlock** — Biometric login via MediaPipe face landmarks
 
 ---
 
 ## 🚀 Getting Started
 
-### 1. Prerequisites
-Make sure you have **Python 3.x** and **pip** installed.
+### Prerequisites
+- **Python 3.13+** with pip
+- **Node.js 18+** with npm
+- **Expo Go** app on your mobile device
 
-### 2. Install Dependencies
-Run the following command in the project root directory:
+### 1. Install Backend Dependencies
 ```bash
 pip install -r requirements.txt
 ```
 
-### 3. Training the ML Model (Optional - Pre-trained files are included)
-To retrain the sentiment model on the `dataset/dataset.csv` data:
+### 2. Install Mobile Dependencies
 ```bash
-python backend/model/train_model.py
+cd mobile
+npm install
 ```
-This will compile and update `sentiment_model.pkl` and `vectorizer.pkl` inside `backend/model/`.
 
-### 4. Running the Web Application
-Launch the Flask development server:
+### 3. Start the Backend Server
 ```bash
 python backend/app.py
 ```
-By default, the server runs on `http://127.0.0.1:5000/`.
+The API server runs on `http://0.0.0.0:5000/`.
 
-* Open `http://127.0.0.1:5000/` in your browser to access the journaling page.
-* Open `http://127.0.0.1:5000/dashboard` (or click **Analytics View** in the sidebar) to see statistical analysis and trends!
+### 4. Start the Mobile App
+```bash
+cd mobile
+npx expo start
+```
+Scan the QR code with Expo Go to launch on your device.
+
+### 5. Retrain the ML Model (Optional)
+```bash
+python backend/model/train_model.py
+```
 
 ---
 
 ## 🔗 API Endpoints
 
-### `POST /api/analyze`
-* **Description**: Processes text, saves reflection log, and returns prediction details.
-* **Payload**:
-  ```json
-  {
-    "text": "Today was a productive day, I finished all my tasks."
-  }
-  ```
-* **Response**:
-  ```json
-  {
-    "id": 4,
-    "sentiment": "Positive",
-    "confidence": 0.8953,
-    "recommendation": "You're doing great! Keep up this positive energy. Remember to appreciate this moment and continue doing what makes you happy!",
-    "timestamp": "2026-06-25 18:15:32"
-  }
-  ```
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/analyze` | Analyze journal text and return sentiment |
+| `GET` | `/api/history` | Get all journal entries |
+| `GET` | `/api/stats` | Aggregated sentiment statistics |
+| `POST` | `/api/register` | Register a new user |
+| `POST` | `/api/login` | User login |
+| `POST` | `/api/face/register` | Register face encoding |
+| `POST` | `/api/face/verify` | Verify face for login |
 
-### `GET /api/history`
-* **Description**: Returns all journal records, newest first.
-* **Response**: Array of logged journal objects.
+---
 
-### `GET /api/stats`
-* **Description**: Aggregates totals and timeline logs for Chart.js dashboard integration.
-* **Response**:
-  ```json
-  {
-    "counts": {
-      "Positive": 8,
-      "Neutral": 4,
-      "Negative": 2
-    },
-    "timeline": [
-      {
-        "timestamp": "2026-06-25 18:10:00",
-        "sentiment": "Positive",
-        "confidence": 0.72,
-        "preview": "Great meeting today..."
-      }
-    ],
-    "total": 14
-  }
-  ```
+## 📱 Features
+
+- **Sentiment Analysis** — ML-powered mood detection from journal text
+- **Journal History** — Track all past entries with sentiment labels
+- **Analytics Dashboard** — Visual mood trends and statistics
+- **Face Unlock** — Biometric authentication using face landmarks
+- **Recommendations** — Personalized mental health tips

@@ -8,6 +8,7 @@ import re
 import smtplib
 from datetime import datetime, timedelta
 from flask import Flask, request, jsonify, send_from_directory
+from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -15,8 +16,15 @@ from email.mime.multipart import MIMEMultipart
 # Add backend directory to path
 sys.path.append(os.path.abspath(os.path.dirname(__file__)))
 from utils.preprocessing import clean_text
+from utils.face_recognition_utils import (
+    extract_face_encoding_from_base64,
+    compare_face_encodings,
+    encoding_to_json,
+    FACE_LIBS_AVAILABLE,
+)
 
 app = Flask(__name__)
+CORS(app)
 
 # Constants
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
@@ -80,6 +88,14 @@ def init_db():
     user_columns = [row[1] for row in cursor.fetchall()]
     if 'is_admin' not in user_columns:
         cursor.execute("ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0")
+        
+    # 6. Check if biometric_token column exists in users, and add if missing
+    if 'biometric_token' not in user_columns:
+        cursor.execute("ALTER TABLE users ADD COLUMN biometric_token TEXT DEFAULT NULL")
+
+    # 7. Check if face_encoding column exists in users, and add if missing
+    if 'face_encoding' not in user_columns:
+        cursor.execute("ALTER TABLE users ADD COLUMN face_encoding TEXT DEFAULT NULL")
         
     conn.commit()
     conn.close()
@@ -414,6 +430,185 @@ def demo_login():
         return jsonify({'error': f'Database error: {str(e)}'}), 500
 
 
+@app.route('/api/auth/biometric-enroll', methods=['POST'])
+def biometric_enroll():
+    data = request.get_json() or {}
+    user_id = data.get('user_id')
+    biometric_token = data.get('biometric_token')
+    
+    if not user_id or not biometric_token:
+        return jsonify({'error': 'User ID and Biometric Token are required.'}), 400
+        
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT id FROM users WHERE id = ?", (user_id,))
+        if not cursor.fetchone():
+            conn.close()
+            return jsonify({'error': 'User not found.'}), 404
+            
+        cursor.execute("UPDATE users SET biometric_token = ? WHERE id = ?", (biometric_token, user_id))
+        conn.commit()
+        conn.close()
+        
+        return jsonify({'message': 'Biometrics successfully enrolled in database!'}), 200
+    except Exception as e:
+        return jsonify({'error': f'Database error: {str(e)}'}), 500
+
+
+@app.route('/api/auth/biometric-login', methods=['POST'])
+def biometric_login():
+    data = request.get_json() or {}
+    email = data.get('email', '').strip().lower()
+    biometric_token = data.get('biometric_token')
+    
+    if not email or not biometric_token:
+        return jsonify({'error': 'Email and Biometric Token are required.'}), 400
+        
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT id, email, is_admin, biometric_token FROM users WHERE email = ?", (email,))
+        row = cursor.fetchone()
+        conn.close()
+        
+        if not row:
+            return jsonify({'error': 'User account not found.'}), 404
+            
+        user_id, user_email, is_admin, stored_token = row
+        
+        if not stored_token or stored_token != biometric_token:
+            return jsonify({'error': 'Invalid biometric signature.'}), 401
+            
+        return jsonify({
+            'message': 'Biometric login successful!',
+            'user': {
+                'id': user_id,
+                'email': user_email,
+                'is_admin': is_admin
+            }
+        }), 200
+    except Exception as e:
+        return jsonify({'error': f'Database error: {str(e)}'}), 500
+
+
+@app.route('/api/auth/face-enroll', methods=['POST'])
+def face_enroll():
+    """Extract face landmarks from a captured image and store encoding in the database."""
+    if not FACE_LIBS_AVAILABLE:
+        return jsonify({
+            'error': 'Face recognition is not available on the server. '
+                     'Install: pip install mediapipe opencv-python-headless Pillow'
+        }), 503
+
+    data = request.get_json() or {}
+    user_id = data.get('user_id')
+    face_image = data.get('face_image', '')
+
+    if not user_id or not face_image:
+        return jsonify({'error': 'User ID and face image are required.'}), 400
+
+    try:
+        encoding = extract_face_encoding_from_base64(face_image)
+        if encoding is None:
+            return jsonify({
+                'error': 'No face detected. Center your face in the frame with good lighting and try again.'
+            }), 400
+
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+
+        cursor.execute('SELECT id FROM users WHERE id = ?', (user_id,))
+        if not cursor.fetchone():
+            conn.close()
+            return jsonify({'error': 'User not found.'}), 404
+
+        encoding_json = encoding_to_json(encoding)
+        cursor.execute(
+            'UPDATE users SET face_encoding = ?, biometric_token = ? WHERE id = ?',
+            (encoding_json, 'face_enrolled', user_id),
+        )
+        conn.commit()
+        conn.close()
+
+        return jsonify({
+            'message': 'Face enrolled successfully.',
+            'landmarks_count': len(encoding),
+        }), 200
+    except RuntimeError as e:
+        return jsonify({'error': str(e)}), 503
+    except Exception as e:
+        return jsonify({'error': f'Face enrollment error: {str(e)}'}), 500
+
+
+@app.route('/api/auth/face-verify', methods=['POST'])
+def face_verify():
+    """Compare a live face capture against the enrolled face encoding in the database."""
+    if not FACE_LIBS_AVAILABLE:
+        return jsonify({
+            'error': 'Face recognition is not available on the server. '
+                     'Install: pip install mediapipe opencv-python-headless Pillow'
+        }), 503
+
+    data = request.get_json() or {}
+    email = data.get('email', '').strip().lower()
+    face_image = data.get('face_image', '')
+
+    if not email or not face_image:
+        return jsonify({'error': 'Email and face image are required.'}), 400
+
+    try:
+        live_encoding = extract_face_encoding_from_base64(face_image)
+        if live_encoding is None:
+            return jsonify({
+                'error': 'No face detected. Look directly at the camera and try again.'
+            }), 400
+
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute(
+            'SELECT id, email, is_admin, face_encoding FROM users WHERE email = ?',
+            (email,),
+        )
+        row = cursor.fetchone()
+        conn.close()
+
+        if not row:
+            return jsonify({'error': 'User account not found.'}), 404
+
+        user_id, user_email, is_admin, stored_encoding = row
+
+        if not stored_encoding:
+            return jsonify({
+                'error': 'No face enrolled for this account. Please sign in with password and enroll your face.'
+            }), 400
+
+        is_match, confidence, distance = compare_face_encodings(stored_encoding, live_encoding)
+
+        if not is_match:
+            return jsonify({
+                'error': 'Face did not match. Please try again or use password login.',
+                'confidence': round(confidence, 4),
+                'distance': round(distance, 4),
+            }), 401
+
+        return jsonify({
+            'message': 'Face verified successfully!',
+            'confidence': round(confidence, 4),
+            'user': {
+                'id': user_id,
+                'email': user_email,
+                'is_admin': is_admin,
+            },
+        }), 200
+    except RuntimeError as e:
+        return jsonify({'error': str(e)}), 503
+    except Exception as e:
+        return jsonify({'error': f'Face verification error: {str(e)}'}), 500
+
+
 # ----------------- API Endpoints -----------------
 
 @app.route('/api/analyze', methods=['POST'])
@@ -650,4 +845,4 @@ def admin_toggle_user(user_id):
 if __name__ == '__main__':
     # Ensure models are loaded before running app
     load_models()
-    app.run(host='127.0.0.1', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=True)
