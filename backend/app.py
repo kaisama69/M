@@ -682,58 +682,52 @@ def analyze_sentiment():
         # Vectorize
         features = vectorizer.transform([cleaned if cleaned else "neutral"])
         
-        # Predict using primary Scikit-Learn Logistic Regression model
-        prediction = model.predict(features)[0]
-        
-        # Get confidence/probability
+        # Predict using retrained Scikit-Learn Logistic Regression model
+        raw_pred = str(model.predict(features)[0])
         probs = model.predict_proba(features)[0]
-        classes = model.classes_
-        class_idx = list(classes).index(prediction)
-        confidence = float(probs[class_idx])
+        classes = [str(c) for c in model.classes_]
+        prob_dict = dict(zip(classes, probs))
+        confidence = float(prob_dict.get(raw_pred, 0.5))
 
-        # Clinical Safety Keyword & Multi-layer Sentiment Refinement
         low_text = text.lower()
-        suicidal_kws = [
-            'suicide', 'kill myself', 'end my life', 'want to die', 'dying inside', 
-            'feel like dying', 'feeling like dying', 'wish i was dead', 'rather be dead', 
-            'no reason to live', 'cannot go on', 'cant go on', 'hate my life'
-        ]
-        depression_kws = [
-            'depressed', 'depression', 'hopeless', 'worthless', 'empty inside', 'miserable', 
-            'feel like crying', 'feel like giving up', 'feeling down', 'lonely', 'sadness', 
-            'heartbroken', 'crying', 'broken', 'useless', 'no energy', 'numb', 'dying'
-        ]
-        anxiety_kws = [
-            'anxious', 'anxiety', 'panic', 'panicking', 'panic attack', 'terrified', 
-            'scared', 'fear', 'nervous', 'freaking out', 'worrying', 'worried', 'dread'
-        ]
-        stress_kws = [
-            'stressed', 'stress', 'overwhelmed', 'burnt out', 'burnout', 'exhausted', 
-            'under pressure', 'too much work', 'cant cope', 'can\'t cope', 'breakdown'
-        ]
-        bipolar_kws = ['mood swings', 'bipolar', 'manic', 'mania', 'unstable mood']
 
-        if any(kw in low_text for kw in suicidal_kws):
+        # Explicit Suicidal Ideation Check
+        explicit_suicidal_kws = [
+            'suicide', 'kill myself', 'end my life', 'want to die', 'dying inside', 
+            'wish i was dead', 'rather be dead', 'no reason to live', 'cannot go on', 
+            'cant go on', 'hate my life'
+        ]
+        is_explicit_suicidal = any(kw in low_text for kw in explicit_suicidal_kws)
+
+        # General distress & physical injury/pain keywords
+        physical_pain_kws = ['broke', 'pain', 'hurt', 'injured', 'injury', 'accident', 'bleeding', 'fracture', 'wound']
+        distress_words = [
+            'pain', 'hurt', 'crying', 'hopeless', 'broken', 'dying', 'sick', 
+            'injured', 'suffering', 'terrible', 'horrible', 'sad', 'empty', 
+            'lonely', 'anxious', 'stress', 'scared', 'injury', 'accident'
+        ]
+        has_distress = any(w in low_text for w in distress_words)
+        has_physical_pain = any(w in low_text for w in physical_pain_kws)
+
+        prediction = raw_pred
+
+        if is_explicit_suicidal:
             prediction = 'Suicidal'
             confidence = max(confidence, 0.95)
-        elif any(kw in low_text for kw in depression_kws):
-            if prediction in ['Normal', 'Stress', 'Anxiety']:
-                prediction = 'Depression'
-                confidence = max(confidence, 0.88)
-        elif any(kw in low_text for kw in anxiety_kws):
-            if prediction in ['Normal']:
-                prediction = 'Anxiety'
-                confidence = max(confidence, 0.85)
-        elif any(kw in low_text for kw in stress_kws):
-            if prediction in ['Normal']:
-                prediction = 'Stress'
-                confidence = max(confidence, 0.85)
-        elif any(kw in low_text for kw in bipolar_kws):
-            prediction = 'Bipolar'
+        elif has_physical_pain:
+            prediction = 'Stress' if mood_rating >= 2 else 'Depression'
             confidence = max(confidence, 0.85)
-        elif mood_rating <= 2 and prediction == 'Normal':
-            prediction = 'Depression' if mood_rating == 1 else 'Stress'
-            confidence = max(confidence, 0.80)
+        else:
+            # If raw model predicted 'Suicidal' but input lacks explicit suicidal keywords (e.g. general distress)
+            if raw_pred == 'Suicidal':
+                candidates = {c: prob_dict[c] for c in classes if c not in ['Suicidal', 'Normal']}
+                prediction = max(candidates, key=candidates.get) if candidates else 'Stress'
+                confidence = float(prob_dict.get(prediction, 0.75))
+            # If model predicted 'Normal' BUT user selected Mood 1/2 or text contains distress/pain indicators
+            elif (raw_pred == 'Normal' or confidence < 0.40) and (mood_rating <= 2 or has_distress):
+                candidates = {c: prob_dict[c] for c in classes if c != 'Normal'}
+                prediction = max(candidates, key=candidates.get) if candidates else ('Depression' if mood_rating == 1 else 'Stress')
+                confidence = float(prob_dict.get(prediction, 0.75))
         
         # Determine recommendation based on refined prediction
         recommendation = get_recommendation(prediction)
