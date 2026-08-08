@@ -22,6 +22,10 @@ from utils.face_recognition_utils import (
     encoding_to_json,
     FACE_LIBS_AVAILABLE,
 )
+from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+
+sia = SentimentIntensityAnalyzer()
+
 
 app = Flask(__name__)
 CORS(app)
@@ -101,6 +105,27 @@ def init_db():
     # 7. Check if face_encoding column exists in users, and add if missing
     if 'face_encoding' not in user_columns:
         cursor.execute("ALTER TABLE users ADD COLUMN face_encoding TEXT DEFAULT NULL")
+
+    # 8. Check if mood_rating and tags columns exist in journals
+    cursor.execute("PRAGMA table_info(journals)")
+    journal_columns = [row[1] for row in cursor.fetchall()]
+    if 'mood_rating' not in journal_columns:
+        cursor.execute("ALTER TABLE journals ADD COLUMN mood_rating INTEGER DEFAULT 3")
+    if 'tags' not in journal_columns:
+        cursor.execute("ALTER TABLE journals ADD COLUMN tags TEXT DEFAULT ''")
+
+    # 9. Create breathing_logs table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS breathing_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER REFERENCES users(id),
+            mode TEXT NOT NULL,
+            duration_seconds INTEGER NOT NULL,
+            stress_before INTEGER DEFAULT NULL,
+            stress_after INTEGER DEFAULT NULL,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
         
     conn.commit()
     conn.close()
@@ -642,6 +667,8 @@ def analyze_sentiment():
 
     data = request.get_json() or {}
     text = data.get('text', '').strip()
+    mood_rating = int(data.get('mood_rating', 3))
+    tags = str(data.get('tags', '')).strip()
     
     if not text:
         return jsonify({'error': 'Journal content cannot be empty.'}), 400
@@ -671,9 +698,9 @@ def analyze_sentiment():
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
         cursor.execute('''
-            INSERT INTO journals (raw_text, cleaned_text, sentiment, confidence, recommendation, user_id)
-            VALUES (?, ?, ?, ?, ?, ?)
-        ''', (text, cleaned, prediction, confidence, recommendation, user_id))
+            INSERT INTO journals (raw_text, cleaned_text, sentiment, confidence, recommendation, user_id, mood_rating, tags)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (text, cleaned, prediction, confidence, recommendation, user_id, mood_rating, tags))
         conn.commit()
         
         # Get the ID of the newly created journal entry
@@ -685,6 +712,8 @@ def analyze_sentiment():
             'sentiment': prediction,
             'confidence': confidence,
             'recommendation': recommendation,
+            'mood_rating': mood_rating,
+            'tags': tags,
             'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         })
         
@@ -715,10 +744,122 @@ def get_history():
                 'sentiment': row['sentiment'],
                 'confidence': row['confidence'],
                 'recommendation': row['recommendation'],
+                'mood_rating': row['mood_rating'] if 'mood_rating' in row.keys() and row['mood_rating'] is not None else 3,
+                'tags': row['tags'] if 'tags' in row.keys() and row['tags'] is not None else '',
                 'timestamp': row['timestamp']
             })
             
         return jsonify(history)
+    except Exception as e:
+        return jsonify({'error': f'Database error: {str(e)}'}), 500
+
+@app.route('/api/journal/<int:journal_id>', methods=['DELETE'])
+def delete_journal(journal_id):
+    """Allows user or admin to delete a specific journal entry."""
+    user_id = get_authenticated_user_id()
+    if user_id is None:
+        return jsonify({'error': 'Unauthorized. Please log in.'}), 401
+        
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        # Check user admin status
+        cursor.execute('SELECT is_admin FROM users WHERE id = ?', (user_id,))
+        user_row = cursor.fetchone()
+        is_admin = bool(user_row['is_admin']) if user_row else False
+        
+        # Fetch the target journal entry
+        cursor.execute('SELECT user_id FROM journals WHERE id = ?', (journal_id,))
+        journal_row = cursor.fetchone()
+        
+        if not journal_row:
+            conn.close()
+            return jsonify({'error': 'Journal entry not found.'}), 404
+            
+        # Verify ownership or admin privilege
+        if not is_admin and journal_row['user_id'] != user_id:
+            conn.close()
+            return jsonify({'error': 'Permission denied.'}), 403
+            
+        cursor.execute('DELETE FROM journals WHERE id = ?', (journal_id,))
+        conn.commit()
+        conn.close()
+        
+        return jsonify({'message': 'Journal entry deleted successfully.', 'deleted_id': journal_id}), 200
+    except Exception as e:
+        return jsonify({'error': f'Database error: {str(e)}'}), 500
+
+# ==========================================
+# Breathing Tracker Endpoints
+# ==========================================
+
+@app.route('/api/breathing/log', methods=['POST'])
+def log_breathing_session():
+    """Logs a completed breathing session with optional pre/post stress levels."""
+    user_id = get_authenticated_user_id()
+    if user_id is None:
+        return jsonify({'error': 'Unauthorized. Please log in.'}), 401
+        
+    data = request.get_json() or {}
+    mode = data.get('mode', 'relax')
+    duration = int(data.get('duration_seconds', 180))
+    stress_before = data.get('stress_before')
+    stress_after = data.get('stress_after')
+    
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO breathing_logs (user_id, mode, duration_seconds, stress_before, stress_after)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (user_id, mode, duration, stress_before, stress_after))
+        conn.commit()
+        log_id = cursor.lastrowid
+        conn.close()
+        
+        return jsonify({'message': 'Breathing session logged.', 'id': log_id}), 200
+    except Exception as e:
+        return jsonify({'error': f'Database error: {str(e)}'}), 500
+
+@app.route('/api/breathing/stats', methods=['GET'])
+def get_breathing_stats():
+    """Gets total breathing count, total minutes, and streak days for user."""
+    user_id = get_authenticated_user_id()
+    if user_id is None:
+        return jsonify({'error': 'Unauthorized. Please log in.'}), 401
+        
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT COUNT(*), COALESCE(SUM(duration_seconds), 0), AVG(stress_before - stress_after)
+            FROM breathing_logs
+            WHERE user_id = ?
+        ''', (user_id,))
+        total_sessions, total_seconds, avg_stress_drop = cursor.fetchone()
+        
+        # Calculate distinct active days streak
+        cursor.execute('''
+            SELECT DISTINCT DATE(timestamp)
+            FROM breathing_logs
+            WHERE user_id = ?
+            ORDER BY DATE(timestamp) DESC
+        ''', (user_id,))
+        dates = [row[0] for row in cursor.fetchall()]
+        conn.close()
+        
+        # Simple streak calculation
+        streak = len(dates) # Total unique days logged
+        
+        return jsonify({
+            'total_sessions': total_sessions,
+            'total_minutes': round(total_seconds / 60, 1),
+            'avg_stress_reduction': round(avg_stress_drop, 1) if avg_stress_drop else 0,
+            'streak_days': streak
+        }), 200
     except Exception as e:
         return jsonify({'error': f'Database error: {str(e)}'}), 500
 
@@ -862,17 +1003,77 @@ def admin_toggle_user(user_id):
 
 import json
 
+# Helper functions for crisis logging & session state tracking
+def log_crisis_event(user_id, message, intent, neg_score):
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS crisis_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id TEXT,
+                timestamp TEXT,
+                message TEXT,
+                intent TEXT,
+                negative_score REAL
+            )
+        ''')
+        c.execute('INSERT INTO crisis_events (user_id, timestamp, message, intent, negative_score) VALUES (?,?,?,?,?)',
+                  (user_id, datetime.utcnow().isoformat(), message, intent, neg_score))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"Error logging crisis event: {e}")
+
+def store_user_session_intent(user_id, intent, compound_score):
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS user_intents (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id TEXT,
+                intent TEXT,
+                compound_score REAL,
+                timestamp TEXT
+            )
+        ''')
+        c.execute('INSERT INTO user_intents (user_id, intent, compound_score, timestamp) VALUES (?,?,?,?)',
+                  (user_id, intent, compound_score, datetime.utcnow().isoformat()))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"Error storing user session intent: {e}")
+
+def get_recent_intents(user_id, limit=3):
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute('SELECT intent FROM user_intents WHERE user_id=? ORDER BY id DESC LIMIT ?', (user_id, limit))
+        rows = c.fetchall()
+        conn.close()
+        return [r[0] for r in rows]
+    except Exception as e:
+        print(f"Error retrieving recent intents: {e}")
+        return []
+
 @app.route('/api/chat', methods=['POST'])
 def chat():
     """
-    NLP Intent-Based Chatbot Endpoint
-    Classifies user message intent and returns a predefined response.
+    Enhanced NLP Intent-Based Chatbot Endpoint
+    Features:
+    1. Intent Classification (TF-IDF + Logistic Regression)
+    2. Sentiment Analysis (VADER Polarity & Compound Scoring)
+    3. Crisis-Alert Detector (Suicidal intent / High Negative Sentiment)
+    4. Session State Context Tracker (Stores recent interactions)
     """
-    data = request.get_json()
+    data = request.get_json(silent=True) or request.get_json(force=True, silent=True) or {}
     if not data or 'message' not in data:
         return jsonify({'error': 'No message provided'}), 400
         
-    user_message = data['message'].strip()
+    user_message = str(data['message']).strip()
+    user_id = str(data.get('user_id', request.remote_addr))
+
     if not user_message:
         return jsonify({'error': 'Message cannot be empty'}), 400
         
@@ -880,33 +1081,82 @@ def chat():
         return jsonify({'error': 'Chatbot ML models not loaded'}), 500
         
     try:
-        # Preprocess text
+        # Feature 2: Sentiment Scoring via VADER
+        sentiment_scores = sia.polarity_scores(user_message)
+        compound = sentiment_scores['compound']
+        neg_score = sentiment_scores['neg']
+
+        # Determine overall sentiment label
+        if compound >= 0.05:
+            sentiment_label = 'positive'
+        elif compound <= -0.05:
+            sentiment_label = 'negative'
+        else:
+            sentiment_label = 'neutral'
+
+        # Preprocess text for ML intent prediction
         cleaned_msg = clean_text(user_message)
         if not cleaned_msg:
-            # Fallback for completely empty/meaningless messages
-            return jsonify({'response': "I didn't quite catch that. How are you feeling?"}), 200
-            
-        # Predict intent
+            return jsonify({
+                'response': "I didn't quite catch that. How are you feeling today?",
+                'intent': 'unknown',
+                'sentiment': sentiment_label,
+                'is_crisis': False
+            }), 200
+
+        # Feature 1: Predict Intent using TF-IDF + Logistic Regression
         vec = chatbot_vectorizer.transform([cleaned_msg])
         intent = chatbot_model.predict(vec)[0]
-        
+
+        # Feature 1 (Safety): Crisis-Alert Classifier Check
+        crisis_keywords = ['suicide', 'kill myself', 'end my life', 'want to die', 'harm myself']
+        contains_crisis_kw = any(kw in cleaned_msg.lower() for kw in crisis_keywords)
+
+        if intent == 'suicidal' or contains_crisis_kw or neg_score > 0.65:
+            log_crisis_event(user_id, user_message, intent, neg_score)
+            crisis_responses = [
+                "I care about you, and you are not alone. Please reach out for help immediately. Call or text 988 (Crisis Lifeline) or contact emergency services.",
+                "Your life is important. If you feel in crisis or overwhelmed, please reach out to a trusted professional or call 988 right away.",
+                "It sounds like you're going through a critical crisis. Please connect with emergency support or a crisis helpline at 988."
+            ]
+            return jsonify({
+                'response': random.choice(crisis_responses),
+                'intent': 'crisis',
+                'sentiment': 'crisis',
+                'is_crisis': True,
+                'sentiment_scores': sentiment_scores
+            }), 200
+
         # Load responses mapped to intents
         intent_data_path = os.path.join(BASE_DIR, 'dataset', 'chat_intents.json')
-        with open(intent_data_path, 'r') as f:
-            intent_data = json.load(f)
-            
-        # Get random response for the predicted intent
-        response_text = "I'm here for you. Tell me more."
-        for i in intent_data['intents']:
-            if i['intent'] == intent:
-                response_text = random.choice(i['responses'])
-                break
-                
+        response_text = "I'm here for you. Tell me more about what's on your mind."
+        if os.path.exists(intent_data_path):
+            with open(intent_data_path, 'r') as f:
+                intent_data = json.load(f)
+            for item in intent_data.get('intents', []):
+                if item['intent'] == intent:
+                    response_text = random.choice(item['responses'])
+                    break
+
+        # Feature 3: Session State Tracking
+        store_user_session_intent(user_id, intent, compound)
+        recent_intents = get_recent_intents(user_id, limit=3)
+
+        # Contextual recommendation based on recent user state history
+        suggested_action = None
+        if intent in ['anxious', 'sad'] or compound <= -0.4:
+            suggested_action = "breathing_exercise"
+
         return jsonify({
+            'response': response_text,
             'intent': intent,
-            'response': response_text
+            'sentiment': sentiment_label,
+            'sentiment_scores': sentiment_scores,
+            'is_crisis': False,
+            'recent_history': recent_intents,
+            'suggested_action': suggested_action
         }), 200
-        
+
     except Exception as e:
         print(f"Error in chat endpoint: {e}")
         return jsonify({'error': 'Failed to process message'}), 500
@@ -915,3 +1165,4 @@ if __name__ == '__main__':
     # Ensure models are loaded before running app
     load_models()
     app.run(host='0.0.0.0', port=5000, debug=True)
+

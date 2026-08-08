@@ -64,7 +64,10 @@ const ChatbotScreen = ({ navigation }) => {
       const botMessage = {
         id: (Date.now() + 1).toString(),
         text: data.response || "I'm sorry, I couldn't understand that.",
-        sender: 'bot'
+        sender: 'bot',
+        isCrisis: data.is_crisis || false,
+        sentiment: data.sentiment,
+        suggestedAction: data.suggested_action
       };
 
       setMessages(prev => [...prev, botMessage]);
@@ -83,18 +86,36 @@ const ChatbotScreen = ({ navigation }) => {
 
   const renderMessage = ({ item }) => {
     const isUser = item.sender === 'user';
+    const isCrisis = item.isCrisis;
     
     return (
       <View style={[styles.messageBubble, isUser ? styles.userBubble : styles.botBubble]}>
         {!isUser && (
-          <View style={styles.botAvatar}>
-            <FontAwesome5 name="robot" size={12} color={Colors.white} />
+          <View style={[styles.botAvatar, isCrisis && { backgroundColor: '#e63946' }]}>
+            <FontAwesome5 name={isCrisis ? "exclamation-triangle" : "robot"} size={12} color={Colors.white} />
           </View>
         )}
-        <View style={[styles.messageContent, isUser ? styles.userContent : styles.botContent]}>
-          <Text style={[styles.messageText, isUser ? styles.userText : styles.botText]}>
+        <View style={[
+          styles.messageContent, 
+          isUser ? styles.userContent : styles.botContent,
+          isCrisis && styles.crisisContent
+        ]}>
+          <Text style={[
+            styles.messageText, 
+            isUser ? styles.userText : styles.botText,
+            isCrisis && styles.crisisText
+          ]}>
             {item.text}
           </Text>
+          {item.suggestedAction === 'breathing_exercise' && (
+            <TouchableOpacity 
+              style={styles.actionButton}
+              onPress={() => navigation.navigate('Breathing')}
+            >
+              <FontAwesome5 name="wind" size={12} color={Colors.primary} />
+              <Text style={styles.actionButtonText}>Start Breathing Exercise</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
     );
@@ -266,6 +287,31 @@ const styles = StyleSheet.create({
   sendButtonDisabled: {
     backgroundColor: Colors.textMuted,
     opacity: 0.5,
+  },
+  crisisContent: {
+    backgroundColor: '#fff0f0',
+    borderColor: '#e63946',
+    borderWidth: 1.5,
+  },
+  crisisText: {
+    color: '#d62828',
+    fontFamily: FontFamily.bold,
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    backgroundColor: 'rgba(78, 140, 255, 0.1)',
+    borderRadius: 12,
+    alignSelf: 'flex-start',
+  },
+  actionButtonText: {
+    marginLeft: 6,
+    fontSize: 12,
+    fontFamily: FontFamily.semiBold,
+    color: Colors.primary,
   },
 });
 

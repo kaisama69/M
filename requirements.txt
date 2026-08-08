@@ -7,3 +7,4 @@ mediapipe>=0.10.0
 opencv-python-headless>=4.8.0
 Pillow>=10.0.0
 werkzeug>=2.0.0
+vaderSentiment>=3.3.2

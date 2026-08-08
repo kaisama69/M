@@ -7,7 +7,6 @@ import { useFonts, Outfit_400Regular, Outfit_500Medium, Outfit_600SemiBold, Outf
 import { FontAwesome5 } from '@expo/vector-icons';
 
 import AppNavigator from './src/navigation/AppNavigator';
-import SoundscapePlayer from './src/components/SoundscapePlayer';
 import { Colors, FontFamily } from './src/theme';
 
 // ─── Inject global CSS on web to style the outer page ─────────────────
@@ -118,12 +117,7 @@ export default function App() {
         </View>
       )}
 
-      {/* Global Ambient Soundscape Player widget (at top of dashboard when logged in) */}
-      {user && (
-        <View style={styles.playerWrapper}>
-          <SoundscapePlayer />
-        </View>
-      )}
+
 
       {/* Navigation Container */}
       <View style={styles.navWrapper}>

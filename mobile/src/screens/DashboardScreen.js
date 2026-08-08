@@ -39,10 +39,11 @@ const sentimentScore = (s) => {
 const DashboardScreen = () => {
   const [stats, setStats] = useState(null);
   const [allLogs, setAllLogs] = useState([]);
-  const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
+  const [breathingStats, setBreathingStats] = useState({ streak_days: 0, total_minutes: 0, avg_stress_reduction: 0 });
 
   const isFocused = useIsFocused();
 
@@ -71,9 +72,10 @@ const DashboardScreen = () => {
 
       const headers = { 'X-User-ID': userId };
 
-      const [statsRes, historyRes] = await Promise.all([
+      const [statsRes, historyRes, breathRes] = await Promise.all([
         fetch(api('/api/stats'), { headers }),
         fetch(api('/api/history'), { headers }),
+        fetch(api('/api/breathing/stats'), { headers }),
       ]);
 
       if (statsRes.status === 401 || historyRes.status === 401) {
@@ -87,13 +89,39 @@ const DashboardScreen = () => {
 
       const statsData = await statsRes.json();
       const historyData = await historyRes.json();
+      const breathData = breathRes.ok ? await breathRes.json() : { streak_days: 0, total_minutes: 0, avg_stress_reduction: 0 };
 
       setStats(statsData);
       setAllLogs(historyData);
+      setBreathingStats(breathData);
     } catch (error) {
       showToast(error.message || 'Error loading analytics statistics.', 'error');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDeleteJournal = async (logId) => {
+    try {
+      const userId = await getUserId();
+      if (!userId) return;
+
+      const response = await fetch(api(`/api/journal/${logId}`), {
+        method: 'DELETE',
+        headers: {
+          'X-User-ID': userId,
+        },
+      });
+
+      if (response.ok) {
+        showToast('Journal reflection deleted.', 'success');
+        loadDashboard();
+      } else {
+        const errData = await response.json();
+        showToast(errData.error || 'Failed to delete entry.', 'error');
+      }
+    } catch (e) {
+      showToast('Error deleting journal entry.', 'error');
     }
   };
 
@@ -223,34 +251,39 @@ const DashboardScreen = () => {
         <Header title="Analytics" subtitle="Emotional trajectories and cognitive insights" />
 
         {/* KPI Grid */}
-        <View style={styles.kpiContainer}>
-          {/* KPI 1 */}
-          <View style={[SharedStyles.card, styles.kpiCard]}>
-            <View style={[styles.kpiIconWrap, { backgroundColor: 'rgba(139,92,246,0.1)', borderColor: 'rgba(139,92,246,0.2)' }]}>
-              <FontAwesome5 name="book" size={18} color={Colors.primary} />
+        <View style={styles.statsGrid}>
+          <View style={styles.statCard}>
+            <View style={[styles.iconCircle, { backgroundColor: `${Colors.primary}20` }]}>
+              <FontAwesome5 name="book-open" size={16} color={Colors.primary} />
             </View>
-            <Text style={styles.kpiVal}>{stats?.total || 0}</Text>
-            <Text style={styles.kpiSub}>Total Entries</Text>
+            <Text style={styles.statNumber}>{stats?.total || 0}</Text>
+            <Text style={styles.statLabel}>Journal Entries</Text>
           </View>
 
-          {/* KPI 2 */}
-          <View style={[SharedStyles.card, styles.kpiCard]}>
-            <View style={[styles.kpiIconWrap, { backgroundColor: `${dominantMeta.color}15`, borderColor: `${dominantMeta.color}30` }]}>
-              <FontAwesome5 name={dominantMeta.icon} size={18} color={dominantMeta.color} />
+          <View style={styles.statCard}>
+            <View style={[styles.iconCircle, { backgroundColor: `${dominantMeta.color}20` }]}>
+              <FontAwesome5 name={dominantMeta.icon} size={16} color={dominantMeta.color} />
             </View>
-            <Text style={[styles.kpiVal, { color: dominantMeta.color }]} numberOfLines={1}>
+            <Text style={[styles.statNumber, { color: dominantMeta.color, fontSize: 16 }]} numberOfLines={1}>
               {dominantMeta.label}
             </Text>
-            <Text style={styles.kpiSub}>Dominant State</Text>
+            <Text style={styles.statLabel}>Dominant Mood</Text>
           </View>
 
-          {/* KPI 3 */}
-          <View style={[SharedStyles.card, styles.kpiCard]}>
-            <View style={[styles.kpiIconWrap, { backgroundColor: 'rgba(59,130,246,0.1)', borderColor: 'rgba(59,130,246,0.2)' }]}>
-              <FontAwesome5 name="percentage" size={18} color={Colors.neutral} />
+          <View style={styles.statCard}>
+            <View style={[styles.iconCircle, { backgroundColor: 'rgba(251, 191, 36, 0.2)' }]}>
+              <FontAwesome5 name="fire" size={16} color="#fbbf24" />
             </View>
-            <Text style={styles.kpiVal}>{avgConf}%</Text>
-            <Text style={styles.kpiSub}>Avg Confidence</Text>
+            <Text style={styles.statNumber}>{breathingStats.streak_days} Days</Text>
+            <Text style={styles.statLabel}>Mindfulness Streak</Text>
+          </View>
+
+          <View style={styles.statCard}>
+            <View style={[styles.iconCircle, { backgroundColor: `${Colors.positive}20` }]}>
+              <FontAwesome5 name="spa" size={16} color={Colors.positive} />
+            </View>
+            <Text style={styles.statNumber}>{breathingStats.total_minutes}m</Text>
+            <Text style={styles.statLabel}>Min Calmed</Text>
           </View>
         </View>
 
@@ -323,16 +356,19 @@ const DashboardScreen = () => {
                         </Text>
                         <Text style={styles.logDate}>{formatDateTime(log.timestamp)}</Text>
                       </View>
-                      <View style={{ alignItems: 'flex-end', gap: 4 }}>
+                      <View style={{ alignItems: 'flex-end', gap: 6 }}>
                         <View style={[SharedStyles.badge, { backgroundColor: `${meta.color}15` }]}>
                           <FontAwesome5 name={meta.icon} size={10} color={meta.color} />
                           <Text style={[styles.badgeText, { color: meta.color }]}>
                             {meta.label}
                           </Text>
                         </View>
-                        <Text style={styles.logConfidence}>
-                          Conf: {Math.round(log.confidence * 100)}%
-                        </Text>
+                        <TouchableOpacity
+                          style={styles.deleteBtn}
+                          onPress={() => handleDeleteJournal(log.id)}
+                        >
+                          <FontAwesome5 name="trash-alt" size={11} color="#f87171" />
+                        </TouchableOpacity>
                       </View>
                     </View>
                   );
@@ -453,12 +489,17 @@ const styles = StyleSheet.create({
   },
   logConfidence: {
     fontSize: 10,
-    fontFamily: FontFamily.regular,
+    fontFamily: FontFamily.medium,
     color: Colors.textMuted,
   },
   badgeText: {
     fontSize: 11,
     fontFamily: FontFamily.bold,
+  },
+  deleteBtn: {
+    padding: 5,
+    borderRadius: 6,
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
   },
 });
 

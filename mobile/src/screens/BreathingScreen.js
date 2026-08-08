@@ -9,9 +9,11 @@ import {
   ScrollView,
   Platform,
 } from 'react-native';
-import { Audio } from 'expo-av';
 import { FontAwesome5 } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useIsFocused } from '@react-navigation/native';
 import { Colors, FontFamily, SharedStyles } from '../theme';
+import { api } from '../config';
 import Header from '../components/Header';
 
 const BREATH_MODES = {
@@ -51,6 +53,71 @@ const BreathingScreen = () => {
   const [timeLeft, setTimeLeft] = useState(BREATH_MODES['relax'].steps[0].duration);
   const [cycleCount, setCycleCount] = useState(0);
   const [soundEnabled, setSoundEnabled] = useState(false);
+
+  // Mindfulness Tracker States
+  const [stressBefore, setStressBefore] = useState(5);
+  const [stressAfter, setStressAfter] = useState(3);
+  const [showPreModal, setShowPreModal] = useState(false);
+  const [showPostModal, setShowPostModal] = useState(false);
+  const [stats, setStats] = useState({ streak_days: 0, total_minutes: 0, avg_stress_reduction: 0 });
+
+  const isFocused = useIsFocused();
+
+  const getUserId = async () => {
+    try {
+      const savedUser = await AsyncStorage.getItem('mindscale_user');
+      const user = savedUser ? JSON.parse(savedUser) : null;
+      return user?.id ? user.id.toString() : null;
+    } catch (e) {
+      return null;
+    }
+  };
+
+  const fetchStats = useCallback(async () => {
+    try {
+      const userId = await getUserId();
+      if (!userId) return;
+      const res = await fetch(api('/api/breathing/stats'), {
+        headers: { 'X-User-ID': userId }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setStats(data);
+      }
+    } catch (e) {
+      console.log('Error fetching breathing stats', e);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isFocused) {
+      fetchStats();
+    }
+  }, [isFocused, fetchStats]);
+
+  const logSessionToBackend = async (afterStressVal) => {
+    try {
+      const userId = await getUserId();
+      if (!userId) return;
+      const totalSeconds = cycleCount * currentMode.steps.reduce((a, b) => a + b.duration, 0) || 180;
+      await fetch(api('/api/breathing/log'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-ID': userId
+        },
+        body: JSON.stringify({
+          mode: modeKey,
+          duration_seconds: totalSeconds,
+          stress_before: stressBefore,
+          stress_after: afterStressVal
+        })
+      });
+      fetchStats();
+    } catch (e) {
+      console.log('Error logging breathing session', e);
+    }
+  };
 
   const currentMode = BREATH_MODES[modeKey];
   const currentStep = currentMode.steps[stepIndex];
@@ -187,11 +254,30 @@ const BreathingScreen = () => {
 
   const toggleActive = () => {
     if (!isActive) {
-      // Starting fresh if timer already ran out
-      setIsActive(true);
+      if (cycleCount === 0) {
+        setShowPreModal(true);
+      } else {
+        setIsActive(true);
+      }
     } else {
       setIsActive(false);
     }
+  };
+
+  const startSessionWithStress = () => {
+    setShowPreModal(false);
+    setIsActive(true);
+  };
+
+  const handleFinishSession = () => {
+    setIsActive(false);
+    setShowPostModal(true);
+  };
+
+  const submitPostStress = (val) => {
+    setStressAfter(val);
+    setShowPostModal(false);
+    logSessionToBackend(val);
   };
 
   const handleReset = () => {
@@ -210,6 +296,65 @@ const BreathingScreen = () => {
     <View style={SharedStyles.screenContainer}>
       <ScrollView contentContainerStyle={SharedStyles.screenScroll} keyboardShouldPersistTaps="handled">
         <Header title="Breathing Room" subtitle="Slow down, release stress, and center yourself" />
+
+        {/* Mindfulness Stats Banner */}
+        <View style={styles.statsBanner}>
+          <View style={styles.statItem}>
+            <Text style={styles.statVal}>🔥 {stats.streak_days}</Text>
+            <Text style={styles.statLbl}>Days Streak</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={styles.statVal}>⏱️ {stats.total_minutes}m</Text>
+            <Text style={styles.statLbl}>Min Calmed</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={styles.statVal}>📉 -{stats.avg_stress_reduction}</Text>
+            <Text style={styles.statLbl}>Avg Stress Drop</Text>
+          </View>
+        </View>
+
+        {/* Pre-Session Stress Modal / Picker */}
+        {showPreModal && (
+          <View style={[SharedStyles.card, { marginBottom: 16, borderColor: Colors.primary }]}>
+            <Text style={styles.modalTitle}>How is your stress level right now?</Text>
+            <Text style={styles.modalSubTitle}>Pick from 1 (Calm) to 10 (Overwhelmed)</Text>
+            <View style={styles.scaleRow}>
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
+                <TouchableOpacity
+                  key={num}
+                  style={[styles.scaleNumBtn, stressBefore === num && styles.scaleNumBtnSelected]}
+                  onPress={() => setStressBefore(num)}
+                >
+                  <Text style={[styles.scaleNumText, stressBefore === num && styles.scaleNumTextSelected]}>{num}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <TouchableOpacity onPress={startSessionWithStress} style={styles.startModalBtn}>
+              <Text style={styles.startModalBtnText}>Start Guided Breathing</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Post-Session Stress Modal */}
+        {showPostModal && (
+          <View style={[SharedStyles.card, { marginBottom: 16, borderColor: Colors.positive }]}>
+            <Text style={styles.modalTitle}>Great Job! How do you feel now?</Text>
+            <Text style={styles.modalSubTitle}>Select your new stress level (1 to 10)</Text>
+            <View style={styles.scaleRow}>
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
+                <TouchableOpacity
+                  key={num}
+                  style={[styles.scaleNumBtn, stressAfter === num && styles.scaleNumBtnSelected]}
+                  onPress={() => submitPostStress(num)}
+                >
+                  <Text style={[styles.scaleNumText, stressAfter === num && styles.scaleNumTextSelected]}>{num}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        )}
 
         {/* Bubble container */}
         <View style={[SharedStyles.card, styles.bubbleContainer]}>
@@ -261,6 +406,12 @@ const BreathingScreen = () => {
               <FontAwesome5 name={isActive ? 'pause' : 'play'} size={14} color={Colors.white} />
               <Text style={styles.btnText}>{isActive ? 'Pause' : 'Begin Session'}</Text>
             </TouchableOpacity>
+
+            {cycleCount > 0 && (
+              <TouchableOpacity onPress={handleFinishSession} style={styles.finishBtn}>
+                <Text style={styles.finishBtnText}>Complete</Text>
+              </TouchableOpacity>
+            )}
 
             <TouchableOpacity onPress={handleReset} style={styles.resetBtn}>
               <Text style={styles.resetBtnText}>Reset</Text>
@@ -462,6 +613,103 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.regular,
     color: Colors.textMuted,
     lineHeight: 16,
+  },
+  statsBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    backgroundColor: Colors.cardBg,
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: Colors.cardBorder,
+  },
+  statItem: {
+    alignItems: 'center',
+  },
+  statVal: {
+    fontSize: 16,
+    fontFamily: FontFamily.bold,
+    color: Colors.textPrimary,
+  },
+  statLbl: {
+    fontSize: 10,
+    fontFamily: FontFamily.medium,
+    color: Colors.textMuted,
+    marginTop: 2,
+  },
+  statDivider: {
+    width: 1,
+    height: 24,
+    backgroundColor: Colors.cardBorder,
+  },
+  modalTitle: {
+    fontSize: 15,
+    fontFamily: FontFamily.bold,
+    color: Colors.textPrimary,
+    textAlign: 'center',
+  },
+  modalSubTitle: {
+    fontSize: 12,
+    fontFamily: FontFamily.medium,
+    color: Colors.textMuted,
+    textAlign: 'center',
+    marginTop: 4,
+    marginBottom: 12,
+  },
+  scaleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  scaleNumBtn: {
+    width: 28,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: Colors.bgDark,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: Colors.cardBorder,
+  },
+  scaleNumBtnSelected: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  scaleNumText: {
+    fontSize: 11,
+    fontFamily: FontFamily.bold,
+    color: Colors.textSecondary,
+  },
+  scaleNumTextSelected: {
+    color: Colors.white,
+  },
+  startModalBtn: {
+    backgroundColor: Colors.primary,
+    borderRadius: 12,
+    paddingVertical: 10,
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  startModalBtnText: {
+    fontSize: 13,
+    fontFamily: FontFamily.bold,
+    color: Colors.white,
+  },
+  finishBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    backgroundColor: 'rgba(52, 211, 153, 0.15)',
+    borderWidth: 1,
+    borderColor: Colors.positive,
+  },
+  finishBtnText: {
+    fontSize: 13,
+    fontFamily: FontFamily.bold,
+    color: Colors.positive,
   },
 });
 

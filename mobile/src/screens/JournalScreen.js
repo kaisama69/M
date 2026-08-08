@@ -19,8 +19,28 @@ import { api } from '../config';
 import Header from '../components/Header';
 import Toast from '../components/Toast';
 
+const MOOD_EMOJIS = [
+  { rating: 1, emoji: '😞', label: 'Very Low' },
+  { rating: 2, emoji: '🙁', label: 'Low' },
+  { rating: 3, emoji: '😐', label: 'Okay' },
+  { rating: 4, emoji: '😊', label: 'Good' },
+  { rating: 5, emoji: '😁', label: 'Great' },
+];
+
+const AVAILABLE_TAGS = ['#Work', '#Sleep', '#Exercise', '#Relationships', '#Stress', '#Gratitude'];
+
+const GUIDED_PROMPTS = [
+  "What is 1 thing that brought you peace today?",
+  "What triggered your stress today, and how did you handle it?",
+  "List 3 small things you are grateful for right now.",
+  "How did you take care of your physical & mental health today?",
+  "What is one win, no matter how small, that you accomplished today?"
+];
+
 const JournalScreen = ({ navigation }) => {
   const [text, setText] = useState('');
+  const [moodRating, setMoodRating] = useState(3);
+  const [selectedTags, setSelectedTags] = useState([]);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [history, setHistory] = useState([]);
@@ -88,6 +108,43 @@ const JournalScreen = ({ navigation }) => {
     setRefreshing(false);
   }, []);
 
+  const toggleTag = (tag) => {
+    if (selectedTags.includes(tag)) {
+      setSelectedTags(prev => prev.filter(t => t !== tag));
+    } else {
+      setSelectedTags(prev => [...prev, tag]);
+    }
+  };
+
+  const setRandomPrompt = () => {
+    const prompt = GUIDED_PROMPTS[Math.floor(Math.random() * GUIDED_PROMPTS.length)];
+    setText(prompt + "\n");
+  };
+
+  const handleDeleteEntry = async (entryId) => {
+    try {
+      const userId = await getUserId();
+      if (!userId) return;
+
+      const response = await fetch(api(`/api/journal/${entryId}`), {
+        method: 'DELETE',
+        headers: {
+          'X-User-ID': userId,
+        },
+      });
+
+      if (response.ok) {
+        showToast('Journal entry deleted successfully.', 'success');
+        setHistory(prev => prev.filter(item => item.id !== entryId));
+      } else {
+        const errData = await response.json();
+        showToast(errData.error || 'Failed to delete entry.', 'error');
+      }
+    } catch (e) {
+      showToast('Error deleting journal entry.', 'error');
+    }
+  };
+
   const handleSubmit = async () => {
     const trimmedText = text.trim();
     if (!trimmedText) return;
@@ -109,7 +166,11 @@ const JournalScreen = ({ navigation }) => {
           'Content-Type': 'application/json',
           'X-User-ID': userId,
         },
-        body: JSON.stringify({ text: trimmedText }),
+        body: JSON.stringify({ 
+          text: trimmedText,
+          mood_rating: moodRating,
+          tags: selectedTags.join(',')
+        }),
       });
 
       if (!response.ok) {
@@ -120,6 +181,8 @@ const JournalScreen = ({ navigation }) => {
       const data = await response.json();
       setResult(data);
       setText('');
+      setSelectedTags([]);
+      setMoodRating(3);
       showToast('Reflection logged and analyzed successfully!', 'success');
       fetchHistory();
     } catch (error) {
@@ -164,11 +227,57 @@ const JournalScreen = ({ navigation }) => {
 
         {/* Input Area */}
         <View style={[SharedStyles.card, { marginBottom: 20 }]}>
-          <Text style={styles.cardHeader}>How was your day?</Text>
+          <View style={styles.cardHeaderRow}>
+            <Text style={styles.cardHeader}>How are you feeling?</Text>
+            <TouchableOpacity style={styles.promptBtn} onPress={setRandomPrompt}>
+              <FontAwesome5 name="lightbulb" size={12} color={Colors.primary} />
+              <Text style={styles.promptBtnText}>Prompt</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Mood Emoji Rating Selector */}
+          <Text style={styles.sectionSubLabel}>1-5 Mood Scale</Text>
+          <View style={styles.emojiRow}>
+            {MOOD_EMOJIS.map((m) => (
+              <TouchableOpacity
+                key={m.rating}
+                style={[
+                  styles.emojiBtn,
+                  moodRating === m.rating && styles.emojiBtnSelected
+                ]}
+                onPress={() => setMoodRating(m.rating)}
+              >
+                <Text style={styles.emojiIcon}>{m.emoji}</Text>
+                <Text style={[styles.emojiLabel, moodRating === m.rating && { color: Colors.primary, fontFamily: FontFamily.bold }]}>
+                  {m.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {/* Tags Selector */}
+          <Text style={styles.sectionSubLabel}>What influenced your mood?</Text>
+          <View style={styles.tagsRow}>
+            {AVAILABLE_TAGS.map((tag) => {
+              const isSelected = selectedTags.includes(tag);
+              return (
+                <TouchableOpacity
+                  key={tag}
+                  style={[styles.tagPill, isSelected && styles.tagPillSelected]}
+                  onPress={() => toggleTag(tag)}
+                >
+                  <Text style={[styles.tagPillText, isSelected && styles.tagPillTextSelected]}>
+                    {tag}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
           <View style={styles.textareaContainer}>
             <TextInput
               style={styles.textarea}
-              placeholder="Write your thoughts here..."
+              placeholder="Write your thoughts or journal entry..."
               placeholderTextColor={Colors.textMuted}
               multiline
               maxLength={2000}
@@ -191,7 +300,7 @@ const JournalScreen = ({ navigation }) => {
                 <ActivityIndicator color={Colors.white} size="small" />
               ) : (
                 <>
-                  <Text style={styles.btnText}>Analyze Mood</Text>
+                  <Text style={styles.btnText}>Log Mood & Analyze</Text>
                   <FontAwesome5 name="arrow-right" size={14} color={Colors.white} />
                 </>
               )}
@@ -265,23 +374,29 @@ const JournalScreen = ({ navigation }) => {
             return (
               <View key={item.id.toString()} style={styles.historyItem}>
                 <View style={{ flex: 1, paddingRight: 10 }}>
-                  <Text style={styles.historyText} numberOfLines={1}>
+                  <Text style={styles.historyText} numberOfLines={2}>
                     {item.raw_text}
                   </Text>
                   <View style={styles.historyMeta}>
                     <Text style={styles.historySubtext}>
                       <FontAwesome5 name="calendar-alt" size={11} /> {formatDateTime(item.timestamp)}
                     </Text>
-                    <Text style={styles.historySubtext}>
-                      <FontAwesome5 name="percentage" size={11} /> {Math.round(item.confidence * 100)}%
-                    </Text>
                   </View>
                 </View>
-                <View style={[SharedStyles.badge, { backgroundColor: `${itemStyle.color}15` }]}>
-                  <FontAwesome5 name={itemStyle.icon} size={11} color={itemStyle.color} />
-                  <Text style={[styles.badgeText, { color: itemStyle.color }]}>
-                    {itemStyle.label}
-                  </Text>
+
+                <View style={{ alignItems: 'flex-end', gap: 6 }}>
+                  <View style={[SharedStyles.badge, { backgroundColor: `${itemStyle.color}15` }]}>
+                    <FontAwesome5 name={itemStyle.icon} size={11} color={itemStyle.color} />
+                    <Text style={[styles.badgeText, { color: itemStyle.color }]}>
+                      {itemStyle.label}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.deleteBtn}
+                    onPress={() => handleDeleteEntry(item.id)}
+                  >
+                    <FontAwesome5 name="trash-alt" size={12} color="#f87171" />
+                  </TouchableOpacity>
                 </View>
               </View>
             );
@@ -452,6 +567,106 @@ const styles = StyleSheet.create({
   badgeText: {
     fontSize: 12,
     fontFamily: FontFamily.bold,
+  },
+  cardHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  promptBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    backgroundColor: 'rgba(78, 140, 255, 0.1)',
+    borderRadius: 12,
+  },
+  promptBtnText: {
+    fontSize: 12,
+    fontFamily: FontFamily.semiBold,
+    color: Colors.primary,
+    marginLeft: 5,
+  },
+  sectionSubLabel: {
+    fontSize: 12,
+    fontFamily: FontFamily.medium,
+    color: Colors.textMuted,
+    marginTop: 6,
+    marginBottom: 6,
+  },
+  emojiRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  emojiBtn: {
+    alignItems: 'center',
+    justify: 'center',
+    padding: 8,
+    borderRadius: 12,
+    backgroundColor: Colors.bgDark,
+    borderWidth: 1,
+    borderColor: Colors.cardBorder,
+    width: '18%',
+  },
+  emojiBtnSelected: {
+    borderColor: Colors.primary,
+    backgroundColor: 'rgba(78, 140, 255, 0.15)',
+  },
+  emojiIcon: {
+    fontSize: 22,
+  },
+  emojiLabel: {
+    fontSize: 9,
+    fontFamily: FontFamily.medium,
+    color: Colors.textMuted,
+    marginTop: 2,
+  },
+  tagsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 14,
+  },
+  tagPill: {
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    backgroundColor: Colors.bgDark,
+    borderWidth: 1,
+    borderColor: Colors.cardBorder,
+  },
+  tagPillSelected: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  tagPillText: {
+    fontSize: 11,
+    fontFamily: FontFamily.medium,
+    color: Colors.textSecondary,
+  },
+  tagPillTextSelected: {
+    color: Colors.white,
+    fontFamily: FontFamily.bold,
+  },
+  historyTagPill: {
+    paddingVertical: 2,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderWidth: 1,
+    borderColor: Colors.cardBorder,
+  },
+  historyTagText: {
+    fontSize: 10,
+    fontFamily: FontFamily.medium,
+    color: Colors.primary,
+  },
+  deleteBtn: {
+    padding: 6,
+    borderRadius: 8,
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
   },
 });
 
