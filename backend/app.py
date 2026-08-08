@@ -689,13 +689,18 @@ def analyze_sentiment():
         prob_dict = dict(zip(classes, probs))
         confidence = float(prob_dict.get(raw_pred, 0.5))
 
+        # VADER Sentiment Scoring
+        vader_scores = sia.polarity_scores(text)
+        vader_comp = vader_scores['compound']
+
         low_text = text.lower()
 
         # Explicit Suicidal Ideation Check
         explicit_suicidal_kws = [
             'suicide', 'kill myself', 'end my life', 'want to die', 'dying inside', 
             'wish i was dead', 'rather be dead', 'no reason to live', 'cannot go on', 
-            'cant go on', 'hate my life'
+            'cant go on', 'hate my life', 'feel like dying', 'feeling like dying',
+            'want to end it', 'cant live', 'can\'t live'
         ]
         is_explicit_suicidal = any(kw in low_text for kw in explicit_suicidal_kws)
 
@@ -704,7 +709,9 @@ def analyze_sentiment():
         distress_words = [
             'pain', 'hurt', 'crying', 'hopeless', 'broken', 'dying', 'sick', 
             'injured', 'suffering', 'terrible', 'horrible', 'sad', 'empty', 
-            'lonely', 'anxious', 'stress', 'scared', 'injury', 'accident'
+            'lonely', 'anxious', 'stress', 'scared', 'injury', 'accident',
+            'giving up', 'depressed', 'not feel good', 'not feeling good', 'not good',
+            'not well', 'not feeling well', 'not okay', 'not happy', 'dont feel good'
         ]
         has_distress = any(w in low_text for w in distress_words)
         has_physical_pain = any(w in low_text for w in physical_pain_kws)
@@ -717,8 +724,12 @@ def analyze_sentiment():
         elif has_physical_pain:
             prediction = 'Stress' if mood_rating >= 2 else 'Depression'
             confidence = max(confidence, 0.85)
+        elif (vader_comp >= 0.15 or mood_rating >= 4) and not has_distress:
+            # Positive / Healthy mood input -> Normal
+            prediction = 'Normal'
+            confidence = max(confidence, 0.90)
         else:
-            # If raw model predicted 'Suicidal' but input lacks explicit suicidal keywords (e.g. general distress)
+            # If raw model predicted 'Suicidal' but input lacks explicit suicidal keywords
             if raw_pred == 'Suicidal':
                 candidates = {c: prob_dict[c] for c in classes if c not in ['Suicidal', 'Normal']}
                 prediction = max(candidates, key=candidates.get) if candidates else 'Stress'
@@ -1146,9 +1157,30 @@ def chat():
         vec = chatbot_vectorizer.transform([cleaned_msg])
         intent = chatbot_model.predict(vec)[0]
 
+        # Sentiment Alignment & Negation Guard:
+        # If the ML model predicts 'happy' but VADER sentiment is negative (compound < 0)
+        # or negation/distress keywords are present, override intent to 'sad' or 'anxious'
+        negation_distress_kws = [
+            'not feel good', 'not feeling good', 'not good', 'not well', 'not feeling well',
+            'not fine', 'not okay', 'not happy', 'dont feel good', 'dont feel well',
+            'cant sleep', 'feel terrible', 'feel awful', 'feel miserable', 'in pain',
+            'broke my hand', 'hurt', 'injured', 'crying', 'upset', 'depressed', 'sad',
+            'pain', 'horrible', 'drained', 'empty', 'hopeless', 'lonely', 'scared', 'worried',
+            'bad', 'terrible', 'sick', 'suffering', 'grief', 'broken'
+        ]
+        msg_lower = user_message.lower()
+        has_distress = any(kw in msg_lower for kw in negation_distress_kws)
+
+        if intent in ['happy', 'greeting', 'goodbye'] and (compound < 0 or neg_score > 0.15 or has_distress):
+            intent = 'sad'
+
         # Feature 1 (Safety): Crisis-Alert Classifier Check
-        crisis_keywords = ['suicide', 'kill myself', 'end my life', 'want to die', 'harm myself']
-        contains_crisis_kw = any(kw in cleaned_msg.lower() for kw in crisis_keywords)
+        crisis_keywords = [
+            'suicide', 'kill myself', 'end my life', 'want to die', 'harm myself',
+            'dying', 'feel like dying', 'feeling like dying', 'want to end it',
+            'cant live', 'can\'t live', 'rather be dead', 'die', 'end it all'
+        ]
+        contains_crisis_kw = any(kw in msg_lower for kw in crisis_keywords)
 
         if intent == 'suicidal' or contains_crisis_kw or neg_score > 0.65:
             log_crisis_event(user_id, user_message, intent, neg_score)

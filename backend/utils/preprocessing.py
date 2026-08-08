@@ -1,6 +1,9 @@
 import re
 
 # Hardcoded list of standard English stopwords to make the preprocessing self-contained and robust.
+# IMPORTANT: Negation words (not, no, never, don't, can't, won't, etc.) are deliberately EXCLUDED
+# from this stopword set because they are critical for sentiment analysis and intent classification.
+# Removing "not" from "i am not feeling good" would produce "feeling good" — completely inverting meaning.
 STOPWORDS = {
     'i', 'me', 'my', 'myself', 'we', 'our', 'ours', 'ourselves', 'you', "you're", "you've", "you'll", "you'd",
     'your', 'yours', 'yourself', 'yourselves', 'he', 'him', 'his', 'himself', 'she', "she's", 'her', 'hers',
@@ -10,13 +13,21 @@ STOPWORDS = {
     'or', 'because', 'as', 'until', 'while', 'of', 'at', 'by', 'for', 'with', 'about', 'against', 'between',
     'into', 'through', 'during', 'before', 'after', 'above', 'below', 'to', 'from', 'up', 'down', 'in', 'out',
     'on', 'off', 'over', 'under', 'again', 'further', 'then', 'once', 'here', 'there', 'when', 'where', 'why',
-    'how', 'all', 'any', 'both', 'each', 'few', 'more', 'most', 'other', 'some', 'such', 'no', 'nor', 'not',
-    'only', 'own', 'same', 'so', 'than', 'too', 'very', 's', 't', 'can', 'will', 'just', 'don', "don't", 'should',
-    "should've", 'now', 'd', 'll', 'm', 'o', 're', 've', 'y', 'ain', 'aren', "aren't", 'couldn', "couldn't",
-    'didn', "didn't", 'doesn', "doesn't", 'hadn', "hadn't", 'hasn', "hasn't", 'haven', "haven't", 'isn', "isn't",
-    'ma', 'mightn', "mightn't", 'mustn', "mustn't", 'needn', "needn't", 'shan', "shan't", 'shouldn', "shouldn't",
-    'wasn', "wasn't", 'weren', "weren't", 'won', "won't", 'wouldn', "wouldn't"
+    'how', 'all', 'any', 'both', 'each', 'few', 'more', 'most', 'other', 'some', 'such',
+    'only', 'own', 'same', 'so', 'than', 'too', 'very', 's', 't', 'will', 'just', 'should',
+    "should've", 'now', 'd', 'll', 'm', 'o', 're', 've', 'y',
+    'ma'
 }
+
+# Negation words that are intentionally KEPT (not in STOPWORDS above):
+# 'no', 'nor', 'not', 'don', "don't", 'can', 'ain',
+# 'aren', "aren't", 'couldn', "couldn't",
+# 'didn', "didn't", 'doesn', "doesn't",
+# 'hadn', "hadn't", 'hasn', "hasn't", 'haven', "haven't",
+# 'isn', "isn't", 'mightn', "mightn't", 'mustn', "mustn't",
+# 'needn', "needn't", 'shan', "shan't", 'shouldn', "shouldn't",
+# 'wasn', "wasn't", 'weren', "weren't", 'won', "won't",
+# 'wouldn', "wouldn't", 'never'
 
 def clean_text(text):
     """
@@ -24,7 +35,7 @@ def clean_text(text):
     1. Converts text to lowercase.
     2. Removes all special characters, punctuation, and numbers.
     3. Tokenizes the text by splitting on whitespace.
-    4. Removes common stopwords.
+    4. Removes common stopwords (but preserves negation words like not, no, never, don't, etc.).
     5. Rejoins tokens into a single clean string.
     """
     if not text or not isinstance(text, str):
@@ -39,8 +50,9 @@ def clean_text(text):
     # 3. Tokenize by whitespace
     tokens = text.split()
     
-    # 4. Remove stopwords
+    # 4. Remove stopwords (negation words are preserved)
     filtered_tokens = [word for word in tokens if word not in STOPWORDS]
     
     # 5. Rejoin
     return " ".join(filtered_tokens)
+
