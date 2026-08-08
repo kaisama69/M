@@ -680,9 +680,9 @@ def analyze_sentiment():
             cleaned = "neutral"
             
         # Vectorize
-        features = vectorizer.transform([cleaned])
+        features = vectorizer.transform([cleaned if cleaned else "neutral"])
         
-        # Predict
+        # Predict using primary Scikit-Learn Logistic Regression model
         prediction = model.predict(features)[0]
         
         # Get confidence/probability
@@ -690,8 +690,52 @@ def analyze_sentiment():
         classes = model.classes_
         class_idx = list(classes).index(prediction)
         confidence = float(probs[class_idx])
+
+        # Clinical Safety Keyword & Multi-layer Sentiment Refinement
+        low_text = text.lower()
+        suicidal_kws = [
+            'suicide', 'kill myself', 'end my life', 'want to die', 'dying inside', 
+            'feel like dying', 'feeling like dying', 'wish i was dead', 'rather be dead', 
+            'no reason to live', 'cannot go on', 'cant go on', 'hate my life'
+        ]
+        depression_kws = [
+            'depressed', 'depression', 'hopeless', 'worthless', 'empty inside', 'miserable', 
+            'feel like crying', 'feel like giving up', 'feeling down', 'lonely', 'sadness', 
+            'heartbroken', 'crying', 'broken', 'useless', 'no energy', 'numb', 'dying'
+        ]
+        anxiety_kws = [
+            'anxious', 'anxiety', 'panic', 'panicking', 'panic attack', 'terrified', 
+            'scared', 'fear', 'nervous', 'freaking out', 'worrying', 'worried', 'dread'
+        ]
+        stress_kws = [
+            'stressed', 'stress', 'overwhelmed', 'burnt out', 'burnout', 'exhausted', 
+            'under pressure', 'too much work', 'cant cope', 'can\'t cope', 'breakdown'
+        ]
+        bipolar_kws = ['mood swings', 'bipolar', 'manic', 'mania', 'unstable mood']
+
+        if any(kw in low_text for kw in suicidal_kws):
+            prediction = 'Suicidal'
+            confidence = max(confidence, 0.95)
+        elif any(kw in low_text for kw in depression_kws):
+            if prediction in ['Normal', 'Stress', 'Anxiety']:
+                prediction = 'Depression'
+                confidence = max(confidence, 0.88)
+        elif any(kw in low_text for kw in anxiety_kws):
+            if prediction in ['Normal']:
+                prediction = 'Anxiety'
+                confidence = max(confidence, 0.85)
+        elif any(kw in low_text for kw in stress_kws):
+            if prediction in ['Normal']:
+                prediction = 'Stress'
+                confidence = max(confidence, 0.85)
+        elif any(kw in low_text for kw in bipolar_kws):
+            prediction = 'Bipolar'
+            confidence = max(confidence, 0.85)
+        elif mood_rating <= 2 and prediction == 'Normal':
+            prediction = 'Depression' if mood_rating == 1 else 'Stress'
+            confidence = max(confidence, 0.80)
         
-        # Determine recommendation
+        # Determine recommendation based on refined prediction
         recommendation = get_recommendation(prediction)
         
         # Store in Database
